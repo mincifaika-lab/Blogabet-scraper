@@ -6,7 +6,7 @@ app.use(express.json());
 
 const CAPSOLVER_API_KEY = 'CAP-BB153D0E73534397DD8E52BE829F7BF15BC24A60632CC65357BE22F504354F1C';
 const RECAPTCHA_SITE_KEY = '6LczfBcTAAAAAJUj9xaEanJHszjBkgr9kQQgyNPI';
-const PROXY = 'http://ltosgaaj:abr0hmyrhu2k@31.59.20.176:7684';
+const PROXY = 'http://vssl40kcbg:zcofkp7aqe@pr-eu.proxies.fo:13337
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
