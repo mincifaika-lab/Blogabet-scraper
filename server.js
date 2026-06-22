@@ -13,45 +13,59 @@ app.get('/pick', async (req, res) => {
   if (!pickUrl) return res.status(400).json({ error: 'No URL' });
 
   try {
+    // Първо решаваме CAPTCHA
+    const token = await solveCaptcha(pickUrl);
+    if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
+
+    console.log('Token received, injecting into page...');
+
+    // Използваме Browserless /function за да изпълним JS в браузъра
     const response = await fetch(
-      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
+      'https://chrome.browserless.io/function?token=' + BROWSERLESS_TOKEN,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: pickUrl })
+        body: JSON.stringify({
+          code: `
+            module.exports = async ({ page }) => {
+              await page.goto('${pickUrl}', { waitUntil: 'networkidle2', timeout: 30000 });
+              
+              // Инжектираме CAPTCHA токена
+              await page.evaluate((token) => {
+                document.querySelector('#g-recaptcha-response') && 
+                  (document.querySelector('#g-recaptcha-response').value = token);
+                
+                // Извикваме callback-а директно
+                if (window.pickValidateRecaptchaCallback) {
+                  window.pickValidateRecaptchaCallback();
+                }
+                
+                // Алтернативно - извикваме ajax директно
+                if (window.$) {
+                  $.ajax({
+                    type: 'get',
+                    url: window.location.pathname + '?g-recaptcha-response=' + encodeURIComponent(token)
+                  });
+                }
+              }, '${token}');
+              
+              await page.waitForTimeout(3000);
+              
+              const html = await page.content();
+              return { data: html };
+            };
+          `
+        })
       }
     );
 
-    const html = await response.text();
-    console.log('Response length:', html.length);
+    const result = await response.json();
+    console.log('Function result type:', typeof result);
+    console.log('Function result keys:', Object.keys(result || {}));
+
+    const html = result.data || JSON.stringify(result);
+    console.log('HTML length:', html.length);
     console.log('HTML snippet:', html.substring(0, 500));
-    console.log('Has restricted:', html.includes('Restricted access'));
-    console.log('Has recaptcha:', html.includes('recaptcha'));
-
-    if (html.includes('Restricted access') || html.includes('recaptcha')) {
-      console.log('Solving captcha...');
-      const token = await solveCaptcha(pickUrl);
-      console.log('Token received:', token ? 'YES' : 'NO');
-      if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
-
-      const response2 = await fetch(
-        'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token)
-          })
-        }
-      );
-
-      const html2 = await response2.text();
-      console.log('Response2 length:', html2.length);
-      console.log('HTML2 snippet:', html2.substring(0, 500));
-
-      const pick = parsePick(html2, pickUrl);
-      return res.json({ success: true, pick: pick, html_length: html2.length });
-    }
 
     const pick = parsePick(html, pickUrl);
     res.json({ success: true, pick: pick, html_length: html.length });
