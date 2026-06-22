@@ -114,43 +114,4 @@ function sleep(ms) {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on port ' + PORT));    });
-
-    const resultData = await resultRes.json();
-    if (resultData.status === 'ready') return resultData.solution.gRecaptchaResponse;
-    if (resultData.status !== 'processing') return null;
-    await sleep(5000);
-  }
-  return null;
-}
-
-function parsePick(html, url) {
-  let text = '🎯 НОВА ПРОГНОЗА\n\n';
-  text += '🔗 ' + url + '\n\n';
-
-  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  if (h1) {
-    const clean = h1[1].replace(/<[^>]+>/g, '').trim();
-    text += '⚽ ' + clean + '\n';
-  }
-
-  const oddsAt = html.match(/@\s*([\d\.]+)/);
-  if (oddsAt) {
-    text += '💰 Коеф: ' + oddsAt[1] + '\n';
-  }
-
-  if (!h1 && !oddsAt) {
-    text += '⚠️ DEBUG:\n' + html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').substring(0, 500);
-  }
-
-  return text;
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));
-    
-    
