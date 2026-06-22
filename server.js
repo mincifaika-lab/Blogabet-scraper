@@ -13,38 +13,23 @@ app.get('/pick', async (req, res) => {
   if (!pickUrl) return res.status(400).json({ error: 'No URL' });
 
   try {
-    // Browserless отваря страницата и връща HTML след CAPTCHA
     const response = await fetch(
-      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-  url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
-  waitForTimeout: 5000
-})
-      }
+      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN + '&url=' + encodeURIComponent(pickUrl),
+      { method: 'GET' }
     );
 
     const html = await response.text();
     console.log('Response length:', html.length);
     console.log('HTML snippet:', html.substring(0, 300));
 
-    if (html.includes('Restricted access')) {
-      // Трябва CAPTCHA - решаваме я и пращаме отново
+    if (html.includes('Restricted access') || html.includes('recaptcha')) {
       const token = await solveCaptcha(pickUrl);
       if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
 
+      const urlWithToken = pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token);
       const response2 = await fetch(
-        'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-  url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
-  waitForTimeout: 5000
-})
-        }
+        'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN + '&url=' + encodeURIComponent(urlWithToken),
+        { method: 'GET' }
       );
 
       const html2 = await response2.text();
@@ -93,6 +78,43 @@ async function solveCaptcha(pageUrl) {
         taskId: taskId
       })
     });
+
+    const resultData = await resultRes.json();
+    if (resultData.status === 'ready') return resultData.solution.gRecaptchaResponse;
+    if (resultData.status !== 'processing') return null;
+    await sleep(5000);
+  }
+  return null;
+}
+
+function parsePick(html, url) {
+  let text = '🎯 НОВА ПРОГНОЗА\n\n';
+  text += '🔗 ' + url + '\n\n';
+
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) {
+    const clean = h1[1].replace(/<[^>]+>/g, '').trim();
+    text += '⚽ ' + clean + '\n';
+  }
+
+  const oddsAt = html.match(/@\s*([\d\.]+)/);
+  if (oddsAt) {
+    text += '💰 Коеф: ' + oddsAt[1] + '\n';
+  }
+
+  if (!h1 && !oddsAt) {
+    text += '⚠️ DEBUG:\n' + html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').substring(0, 500);
+  }
+
+  return text;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log('Server running on port ' + PORT));    });
 
     const resultData = await resultRes.json();
     if (resultData.status === 'ready') return resultData.solution.gRecaptchaResponse;
