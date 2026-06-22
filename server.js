@@ -20,10 +20,9 @@ app.get('/pick', async (req, res) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: pickUrl,
-          waitFor: 5000,
-          gotoOptions: { waitUntil: 'networkidle2' }
-        })
+  url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
+  waitForTimeout: 5000
+})
       }
     );
 
@@ -42,10 +41,9 @@ app.get('/pick', async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
-            waitFor: 5000,
-            gotoOptions: { waitUntil: 'networkidle2' }
-          })
+  url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
+  waitForTimeout: 5000
+})
         }
       );
 
