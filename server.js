@@ -14,8 +14,12 @@ app.get('/pick', async (req, res) => {
 
   try {
     const response = await fetch(
-      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN + '&url=' + encodeURIComponent(pickUrl),
-      { method: 'GET' }
+      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: pickUrl })
+      }
     );
 
     const html = await response.text();
@@ -26,10 +30,15 @@ app.get('/pick', async (req, res) => {
       const token = await solveCaptcha(pickUrl);
       if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
 
-      const urlWithToken = pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token);
       const response2 = await fetch(
-        'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN + '&url=' + encodeURIComponent(urlWithToken),
-        { method: 'GET' }
+        'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token)
+          })
+        }
       );
 
       const html2 = await response2.text();
