@@ -13,55 +13,54 @@ app.get('/pick', async (req, res) => {
   if (!pickUrl) return res.status(400).json({ error: 'No URL' });
 
   try {
-    // Първо решаваме CAPTCHA
     const token = await solveCaptcha(pickUrl);
     if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
 
     console.log('Token received, injecting into page...');
 
-    // Използваме Browserless /function за да изпълним JS в браузъра
+    const code = `
+      module.exports = async ({ page, context }) => {
+        const { url, token } = context;
+        
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+        
+        await page.evaluate((t) => {
+          const textareas = document.querySelectorAll('textarea[name="g-recaptcha-response"]');
+          textareas.forEach(ta => { ta.value = t; });
+          
+          if (typeof pickValidateRecaptchaCallback === 'function') {
+            pickValidateRecaptchaCallback();
+          } else if (window.$ ) {
+            $.ajax({
+              type: 'get',
+              url: window.location.pathname + '?g-recaptcha-response=' + encodeURIComponent(t)
+            }).done(function(html) {
+              document.body.innerHTML = html;
+            });
+          }
+        }, token);
+        
+        await new Promise(r => setTimeout(r, 5000));
+        
+        const html = await page.content();
+        return { data: html };
+      };
+    `;
+
     const response = await fetch(
       'https://chrome.browserless.io/function?token=' + BROWSERLESS_TOKEN,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: `
-            module.exports = async ({ page }) => {
-              await page.goto('${pickUrl}', { waitUntil: 'networkidle2', timeout: 30000 });
-              
-              // Инжектираме CAPTCHA токена
-              await page.evaluate((token) => {
-                document.querySelector('#g-recaptcha-response') && 
-                  (document.querySelector('#g-recaptcha-response').value = token);
-                
-                // Извикваме callback-а директно
-                if (window.pickValidateRecaptchaCallback) {
-                  window.pickValidateRecaptchaCallback();
-                }
-                
-                // Алтернативно - извикваме ajax директно
-                if (window.$) {
-                  $.ajax({
-                    type: 'get',
-                    url: window.location.pathname + '?g-recaptcha-response=' + encodeURIComponent(token)
-                  });
-                }
-              }, '${token}');
-              
-              await page.waitForTimeout(3000);
-              
-              const html = await page.content();
-              return { data: html };
-            };
-          `
+          code: code,
+          context: { url: pickUrl, token: token }
         })
       }
     );
 
     const result = await response.json();
-    console.log('Function result type:', typeof result);
-    console.log('Function result keys:', Object.keys(result || {}));
+    console.log('Result keys:', Object.keys(result || {}));
 
     const html = result.data || JSON.stringify(result);
     console.log('HTML length:', html.length);
