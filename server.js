@@ -24,10 +24,14 @@ app.get('/pick', async (req, res) => {
 
     const html = await response.text();
     console.log('Response length:', html.length);
-    console.log('HTML snippet:', html.substring(0, 300));
+    console.log('HTML snippet:', html.substring(0, 500));
+    console.log('Has restricted:', html.includes('Restricted access'));
+    console.log('Has recaptcha:', html.includes('recaptcha'));
 
     if (html.includes('Restricted access') || html.includes('recaptcha')) {
+      console.log('Solving captcha...');
       const token = await solveCaptcha(pickUrl);
+      console.log('Token received:', token ? 'YES' : 'NO');
       if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
 
       const response2 = await fetch(
@@ -43,7 +47,7 @@ app.get('/pick', async (req, res) => {
 
       const html2 = await response2.text();
       console.log('Response2 length:', html2.length);
-      console.log('HTML2 snippet:', html2.substring(0, 300));
+      console.log('HTML2 snippet:', html2.substring(0, 500));
 
       const pick = parsePick(html2, pickUrl);
       return res.json({ success: true, pick: pick, html_length: html2.length });
@@ -73,6 +77,7 @@ async function solveCaptcha(pageUrl) {
   });
 
   const createData = await createRes.json();
+  console.log('CapSolver create:', JSON.stringify(createData));
   if (createData.errorId !== 0) return null;
 
   const taskId = createData.taskId;
@@ -89,6 +94,7 @@ async function solveCaptcha(pageUrl) {
     });
 
     const resultData = await resultRes.json();
+    console.log('Poll', i + 1, ':', resultData.status);
     if (resultData.status === 'ready') return resultData.solution.gRecaptchaResponse;
     if (resultData.status !== 'processing') return null;
     await sleep(5000);
