@@ -13,58 +13,41 @@ app.get('/pick', async (req, res) => {
   if (!pickUrl) return res.status(400).json({ error: 'No URL' });
 
   try {
-    const token = await solveCaptcha(pickUrl);
-    if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
-
-    console.log('Token received, injecting into page...');
-
-    const code = `
-      module.exports = async ({ page, context }) => {
-        const { url, token } = context;
-        
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-        
-        await page.evaluate((t) => {
-          const textareas = document.querySelectorAll('textarea[name="g-recaptcha-response"]');
-          textareas.forEach(ta => { ta.value = t; });
-          
-          if (typeof pickValidateRecaptchaCallback === 'function') {
-            pickValidateRecaptchaCallback();
-          } else if (window.$ ) {
-            $.ajax({
-              type: 'get',
-              url: window.location.pathname + '?g-recaptcha-response=' + encodeURIComponent(t)
-            }).done(function(html) {
-              document.body.innerHTML = html;
-            });
-          }
-        }, token);
-        
-        await new Promise(r => setTimeout(r, 5000));
-        
-        const html = await page.content();
-        return { data: html };
-      };
-    `;
-
-    const response = await fetch(
-      'https://chrome.browserless.io/function?token=' + BROWSERLESS_TOKEN,
+    // Стъпка 1: Вземаме cookies от Browserless
+    const cookieRes = await fetch(
+      'https://chrome.browserless.io/content?token=' + BROWSERLESS_TOKEN,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: code,
-          context: { url: pickUrl, token: token }
-        })
+        body: JSON.stringify({ url: pickUrl })
+      }
+    );
+    
+    const cookies = cookieRes.headers.get('set-cookie') || '';
+    console.log('Cookies:', cookies);
+
+    // Стъпка 2: Решаваме CAPTCHA
+    const token = await solveCaptcha(pickUrl);
+    if (!token) return res.status(500).json({ error: 'CAPTCHA failed' });
+    console.log('Token received!');
+
+    // Стъпка 3: Fetch с cookies и токен
+    const pageRes = await fetch(
+      pickUrl + '?g-recaptcha-response=' + encodeURIComponent(token),
+      {
+        method: 'GET',
+        headers: {
+          'Cookie': cookies,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Referer': pickUrl,
+          'Accept': 'text/html,application/xhtml+xml'
+        }
       }
     );
 
-    const result = await response.json();
-    console.log('Result keys:', Object.keys(result || {}));
-
-    const html = result.data || JSON.stringify(result);
+    const html = await pageRes.text();
     console.log('HTML length:', html.length);
-    console.log('HTML snippet:', html.substring(0, 500));
+    console.log('HTML snippet:', html.substring(0, 300));
 
     const pick = parsePick(html, pickUrl);
     res.json({ success: true, pick: pick, html_length: html.length });
